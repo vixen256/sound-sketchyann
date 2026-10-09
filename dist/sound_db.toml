@@ -1,0 +1,27 @@
+# This file is read from rom/sound/sound_db.toml in ALL loaded mods
+
+# Supported locations and filters
+# Logo: Sega, Crypton, Piapro, Megastar, Title
+# PVSel: Enter, Exit
+# PVGame: Enter, LowHealth, FiftyCombo
+# Result: Fail, AnyClear, Standard, Great, Excellent, Perfect
+
+# For any PVGame or Result sound, a character or module_id filter can be set, with the format
+# charas = ["MIKU", "RIN", "LEN", "LUKA", "NERU", "HAKU", "KAITO", "MEIKO", "SAKINE", "TETO"]
+# OR
+# module_ids = [7515]
+# These sound effects will only play when that character or module is in the FIRST module slot
+# These filters ONLY work in PVGame or Result
+
+# Supported audio file formats are aac, flac, m4a, mp3, ogg, and wav
+# These files can have any number of channels, any sample rate, etc
+# They will be converted automatically to a format the game likes and understands
+
+# Example:
+# [[sound]]
+# file = "rom/sound/sound.mp3"
+# location = "Result"
+# filter = "AnyClear"
+# weight = 2.0 # Plays 2x as often as other sounds, sounds never play twice in a row though
+# volume = 1.0
+# charas = ["MIKU"]
