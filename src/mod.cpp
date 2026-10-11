@@ -335,8 +335,6 @@ insert_new_sound (const char *filepath, const char *name, f32 volume) {
 	elem->pair.key.assign (name);
 	elem->pair.value = prop;
 
-	FUNCTION_PTR (void, SoundDbPropertyInsertNode, 0x140157A50, map<string, sound_db_property> *root, pair<mapElement<string, sound_db_property> *, u32> *location,
-	              mapElement<string, sound_db_property> *element);
 	mapElement<string, sound_db_property> *parent = sound_work->root->parent;
 
 	auto loc      = pair<mapElement<string, sound_db_property> *, u32> (sound_work->root->parent, 0);
@@ -615,9 +613,8 @@ bool quieten    = false;
 bool playing_se = false;
 std::string playing_se_name;
 f32 new_volumes[3];
-SafetyHookMid sound_stream_array_ctrl_hook;
-void
-sound_stream_array_ctrl (SafetyHookContext &ctx) {
+SIG_SCAN (sigSoundStreamArrayCtrl, "E8 ?? ?? ?? ?? 48 83 C? 58 48 83 E? 01 75 EE 48 8B ?? 24", 0x1405AED39, 0x1405AECF9, 0x1405B0719, 0x1405B5A49);
+MIDHOOK (SoundStreamArrayCtrl, sigSoundStreamArrayCtrl ()) {
 	auto sound_stream = ctx.rcx;
 	auto index        = ctx.rdi - 1;
 	if (quieten) {
@@ -705,16 +702,14 @@ play_se (const std::vector<Sound> &sounds, std::discrete_distribution<u64> &gene
 	playing_se_name.assign (sound.name);
 }
 
-SafetyHookMid data_init_hook;
-void
-data_init (SafetyHookContext &ctx) {
+SIG_SCAN (sigDataInit, "C7 41 68 0B", 0x140322C2D, 0x140322BED, 0x140322CEF, 0x14032268F);
+MIDHOOK (DataInit, sigDataInit ()) {
 	std::thread t (parse_sound_dbs);
 	t.detach ();
 }
 
-SafetyHookMid pvgame_set_rank_hook;
-void
-pvgame_set_rank (SafetyHookContext &ctx) {
+SIG_SCAN (sigPvGameSetRank, "E8 ?? ?? ?? ?? 84 C0 0F 85 ?? ?? ?? ?? 38 86 88", 0x14024BA9F, 0x14024BA8F, 0x14024BBFF, 0x14024B3EF);
+MIDHOOK (PvGameSetRank, sigPvGameSetRank ()) {
 	auto rank = *(i32 *)ctx.rsi + 1;
 
 	auto sounds    = result_fail_sounds;
@@ -751,26 +746,24 @@ pvgame_set_rank (SafetyHookContext &ctx) {
 	play_se (sounds, generator, true, chara, module);
 }
 
-SafetyHookMid nswgam_pvsel_enter_hook;
-void
-nswgam_pvsel_enter (SafetyHookContext &ctx) {
+SIG_SCAN (sigNswgamPvSelEnter, "48 89 ?? 24 ?? 57 48 83 EC 20 48 89 C? E8 ?? ?? ?? ?? C6", 0x1625AC6F0, 0x161DDA9E0, 0x161246F80, 0x162005680);
+HOOK (bool, NswgamPvSelEnter, sigNswgamPvSelEnter (), void *a1) {
 	play_se (pvsel_enter_sounds, pvsel_enter_sounds_generator);
+	return originalNswgamPvSelEnter (a1);
 }
 
-SafetyHookMid nswgam_pvsel_exit_hook;
-void
-nswgam_pvsel_exit (SafetyHookContext &ctx) {
+SIG_SCAN (sigNswgamPvSelExit, "E8 ?? ?? ?? ?? B8 03 00 00 00 E9 ?? ?? ?? ?? E8", 0x1406F032A, 0x1406F006A, 0x1406F189A, 0x1406F6D5A);
+MIDHOOK (NswgamPvSelExit, sigNswgamPvSelExit ()) {
 	if (pvsel_exit_sounds.empty ()) return;
 
 	play_se (pvsel_exit_sounds, pvsel_exit_sounds_generator);
 	// Skip se_ft_cansel
 	ctx.rax = 3;
-	ctx.rip = 0x1406F09B6;
+	ctx.rip = (u64)whereNswgamPvSelExit;
 }
 
-SafetyHookMid nswgam_pvgame_enter_hook;
-void
-nswgam_pvgame_enter (SafetyHookContext &ctx) {
+SIG_SCAN (sigNswgamPvGameEnter, "F3 0F 10 ?? ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B C? E8 ?? ?? ?? ?? C6 47", 0x1406F8C6A, 0x1406F89AA, 0x1406F9F0A, 0x1406FF3CA);
+MIDHOOK (NswgamPvGameEnter, sigNswgamPvGameEnter ()) {
 	if (pvgame_enter_sounds.empty ()) return;
 
 	auto load_data           = (u64)GetPvLoadData ();
@@ -784,26 +777,25 @@ nswgam_pvgame_enter (SafetyHookContext &ctx) {
 	}
 
 	play_se (pvgame_enter_sounds, pvgame_enter_sounds_generator, true, chara, module);
-	ctx.rip = 0x1406F8C7E; // Skip se_ft_music_selector_enter_01
+	ctx.rip = (u64)whereNswgamPvGameEnter + 0x14; // Skip se_ft_music_selector_enter_01
 }
 
-SafetyHookMid cs_pvsel_enter_hook;
-void
-cs_pvsel_enter (SafetyHookContext &ctx) {
+SIG_SCAN (sigCsPvSelEnter, "48 89 ?? 24 ?? 48 89 ?? 24 ?? 48 89 ?? 24 ?? 55 41 54 41 55 41 56 41 57 48 8D ?? 24 ?? 48 81 EC F0 00 00 00 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 45 27 4C 8B ?? 48",
+          0x140202D50, 0x140202D40, 0x140202E60, 0x1402026E0);
+HOOK (bool, CsPvSelEnter, sigCsPvSelEnter (), void *a1) {
 	play_se (pvsel_enter_sounds, pvsel_enter_sounds_generator);
+	return originalCsPvSelEnter (a1);
 }
 
-SafetyHookMid cs_pvsel_exit_hook;
-void
-cs_pvsel_exit (SafetyHookContext &ctx) {
+SIG_SCAN (sigCsPvSelExit, "E8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 1B", 0x140204712, 0x140204702, 0x140204822, 0x1402040A2);
+MIDHOOK (CsPvSelExit, sigCsPvSelExit ()) {
 	if (IsSurvival () || pvsel_exit_sounds.empty ()) return;
 	play_se (pvsel_exit_sounds, pvsel_exit_sounds_generator);
-	ctx.rip = 0x14020473B; // Skip se_ft_cansel
+	ctx.rip = (u64)whereCsPvSelExit + 0x29; // Skip se_ft_cansel
 }
 
-SafetyHookMid cs_pvgame_enter_hook;
-void
-cs_pvgame_enter (SafetyHookContext &ctx) {
+SIG_SCAN (sigCsPvGameEnter, "F3 0F 10 ?? ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 40", 0x14020A954, 0x14020A944, 0x14020AA64, 0x14020A2E4);
+MIDHOOK (CsPvGameEnter, sigCsPvGameEnter ()) {
 	if (pvgame_enter_sounds.empty ()) return;
 
 	auto load_data           = (u64)GetPvLoadData ();
@@ -817,24 +809,21 @@ cs_pvgame_enter (SafetyHookContext &ctx) {
 	}
 
 	play_se (pvgame_enter_sounds, pvgame_enter_sounds_generator, true, chara, module);
-	ctx.rip = 0x14020A968; // Skip se_ft_music_selector_enter_01
+	ctx.rip = (u64)whereCsPvGameEnter + 0x14; // Skip se_ft_music_selector_enter_01
 }
 
-SafetyHookMid adv_logo_sega_hook;
-void
-adv_logo_sega (SafetyHookContext &ctx) {
+SIG_SCAN (sigAdvLogoSega, "45 33 C0 48 8D 15 ?? ?? ?? ?? 33 C9 E8 ?? ?? ?? ?? C6", 0x1401A9398, 0x1401A9488, 0x1401A92D8);
+MIDHOOK (AdvLogoSega, sigAdvLogoSega ()) {
 	if (logo_sega_sounds.empty ()) return;
-	ctx.rip = 0x1401A93A9;
+	ctx.rip = (u64)whereAdvLogoSega + 0x11;
 }
 
 bool sega_se_played     = false;
 bool crypton_se_played  = false;
 bool piapro_se_played   = false;
 bool megastar_se_played = false;
-FUNCTION_PTR (f32, GetAetMarker, 0x1402CA170, i32 sceneId, const char *layerName, const char *marker);
-SafetyHookMid adv_logo_all_hook;
-void
-adv_logo_all (SafetyHookContext &ctx) {
+SIG_SCAN (sigAdvLogoAll, "0F 28 ?? 4C 8D 05 ?? ?? ?? ?? 48 8D ?? ?? ?? ?? ?? 48", 0x1401A9250, 0x1401A9340, 0x1401A9190);
+MIDHOOK (AdvLogoAll, sigAdvLogoAll ()) {
 	auto current_time = ctx.xmm0.f32[0];
 	auto sega         = GetAetMarker (0x52A, "logo_all", "sega");
 	auto crypton      = GetAetMarker (0x52A, "logo_all", "crypton");
@@ -863,22 +852,21 @@ adv_logo_all (SafetyHookContext &ctx) {
 	}
 }
 
-SafetyHookMid adv_title_init_hook;
-void
-adv_title_init (SafetyHookContext &ctx) {
+SIG_SCAN (sigAdvTitleInit, "48 89 ?? 24 ?? 48 89 ?? 24 ?? 48 89 ?? 24 ?? 55 41 56 41 57 48 8D ?? 24 ?? ?? ?? ?? 48 81 EC 40", 0x1401A9A80, 0x1401A9B70, 0x1401A99C0);
+HOOK (bool, AdvTitleInit, sigAdvTitleInit (), void *a1) {
 	play_se (logo_title_sounds, logo_title_sounds_generator);
+	return originalAdvTitleInit (a1);
 }
 
-SafetyHookMid adv_title_dest_hook;
-void
-adv_title_dest (SafetyHookContext &ctx) {
+SIG_SCAN (sigAdvTitleDest, "48 89 ?? 24 ?? 48 89 ?? 24 ?? 57 48 83 EC 20 48 89 C? 48 8D ?? 6C", 0x14E247890, 0x14E02C2A0, 0x14E0F4CE0, 0x14E1236D0);
+HOOK (bool, AdvTitleDest, sigAdvTitleDest (), void *a1) {
 	SoundEffectRelease (1, playing_se_name.c_str (), false);
+	return originalAdvTitleDest (a1);
 }
 
-SafetyHookMid pvgame_loop_hook;
 std::chrono::time_point<std::chrono::high_resolution_clock> last_low_health_se;
-void
-pvgame_loop (SafetyHookContext &ctx) {
+SIG_SCAN (sigPvGameLoop, "40 53 48 83 EC 20 32 ?? E8", 0x1405DA060, 0x1405DA020, 0x1405DB860, 0x1405E0C20);
+HOOK (bool, PvGameLoop, sigPvGameLoop ()) {
 	auto data   = (u64)GetPvGameData ();
 	auto combo  = *(u32 *)(data + 0x2D248);
 	auto health = *(u32 *)(data + 0x2D234);
@@ -899,28 +887,28 @@ pvgame_loop (SafetyHookContext &ctx) {
 	}
 
 	if (combo > 0 && (combo % 50) == 0) play_se (pvgame_fifty_combo_sounds, pvgame_fifty_combo_sounds_generator, false, chara, module);
+	return originalPvGameLoop ();
 }
 
-// TODO: Character filters
 extern "C" {
 __declspec (dllexport) void
 init () {
 	freopen ("CONOUT$", "w", stdout);
 	av_log_set_level (AV_LOG_ERROR);
 
-	sound_stream_array_ctrl_hook = safetyhook::create_mid (0x1405AED39, sound_stream_array_ctrl);
-	data_init_hook               = safetyhook::create_mid (0x14F00D160, data_init);
-	pvgame_set_rank_hook         = safetyhook::create_mid (0x14024BA9F, pvgame_set_rank);
-	nswgam_pvsel_enter_hook      = safetyhook::create_mid (0x1406ED9D0, nswgam_pvsel_enter);
-	nswgam_pvsel_exit_hook       = safetyhook::create_mid (0x1406F032A, nswgam_pvsel_exit);
-	nswgam_pvgame_enter_hook     = safetyhook::create_mid (0x1406F8C6A, nswgam_pvgame_enter);
-	cs_pvsel_enter_hook          = safetyhook::create_mid (0x140202D50, cs_pvsel_enter);
-	cs_pvsel_exit_hook           = safetyhook::create_mid (0x140204712, cs_pvsel_exit);
-	cs_pvgame_enter_hook         = safetyhook::create_mid (0x14020A954, cs_pvgame_enter);
-	adv_logo_sega_hook           = safetyhook::create_mid (0x1401A9398, adv_logo_sega);
-	adv_logo_all_hook            = safetyhook::create_mid (0x1401A9250, adv_logo_all);
-	adv_title_init_hook          = safetyhook::create_mid (0x1401A9A80, adv_title_init);
-	adv_title_dest_hook          = safetyhook::create_mid (0x1401AA010, adv_title_dest);
-	pvgame_loop_hook             = safetyhook::create_mid (0x1405DA060, pvgame_loop);
+	INSTALL_MIDHOOK (SoundStreamArrayCtrl);
+	INSTALL_MIDHOOK (DataInit);
+	INSTALL_MIDHOOK (PvGameSetRank);
+	INSTALL_HOOK (NswgamPvSelEnter);
+	INSTALL_MIDHOOK (NswgamPvSelExit);
+	INSTALL_MIDHOOK (NswgamPvGameEnter);
+	INSTALL_HOOK (CsPvSelEnter);
+	INSTALL_MIDHOOK (CsPvSelExit);
+	INSTALL_MIDHOOK (CsPvGameEnter);
+	INSTALL_MIDHOOK (AdvLogoSega);
+	INSTALL_MIDHOOK (AdvLogoAll);
+	INSTALL_HOOK (AdvTitleInit);
+	INSTALL_HOOK (AdvTitleDest);
+	INSTALL_HOOK (PvGameLoop);
 }
 }

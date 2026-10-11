@@ -1,7 +1,10 @@
+#include <Zydis/Zydis.h>
 #include <bits/stdc++.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <directxmath.h>
+#include <psapi.h>
+#include <qis/signature.hpp>
 #include <safetyhook.hpp>
 #include <shellapi.h>
 #include <stdbool.h>
@@ -33,6 +36,9 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 typedef float f32;
 typedef double f64;
+
+void *sig_scan (const char *signature, std::initializer_list<u64> hints);
+void *sig_scan_xref (const char *signature, std::initializer_list<u64> hints);
 
 #define INSERT_PADDING(length) u8 pad##__LINE__[length]
 
@@ -71,3 +77,43 @@ typedef double f64;
 	}
 
 #define COUNTOFARR(arr) sizeof (arr) / sizeof (arr[0])
+
+#define HOOK(returnType, name, location, ...)         \
+	typedef returnType (*typeof##name) (__VA_ARGS__); \
+	SafetyHookInline hook##name{};                    \
+	typeof##name original##name = nullptr;            \
+	void *where##name           = (void *)location;   \
+	returnType impl##name (__VA_ARGS__)
+
+#define INSTALL_HOOK(name)                                                \
+	hook##name     = safetyhook::create_inline (where##name, impl##name); \
+	original##name = hook##name.original<typeof##name> ();
+
+#define MIDHOOK(name, location)           \
+	SafetyHookMid hook##name;             \
+	void *where##name = (void *)location; \
+	void impl##name (SafetyHookContext &ctx)
+
+#define INSTALL_MIDHOOK(name) hook##name = safetyhook::create_mid (where##name, impl##name);
+
+#define SIG_SCAN(name, pattern, ...)                                                  \
+	void *name ();                                                                    \
+	void *name##Addr = name ();                                                       \
+	void *name () {                                                                   \
+		if (!name##Addr) {                                                            \
+			std::initializer_list<u64> name##Hints = {__VA_ARGS__};                   \
+			name##Addr                             = sig_scan (pattern, name##Hints); \
+		}                                                                             \
+		return name##Addr;                                                            \
+	}
+
+#define SIG_SCAN_XREF(name, pattern, ...)                                                  \
+	void *name ();                                                                         \
+	void *name##Addr = name ();                                                            \
+	void *name () {                                                                        \
+		if (!name##Addr) {                                                                 \
+			std::initializer_list<u64> name##Hints = {__VA_ARGS__};                        \
+			name##Addr                             = sig_scan_xref (pattern, name##Hints); \
+		}                                                                                  \
+		return name##Addr;                                                                 \
+	}

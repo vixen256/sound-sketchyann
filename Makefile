@@ -2,4 +2,4 @@ all:
 	@make -C build
 
 setup:
-	@cmake -B ./build
+	@cmake -DCMAKE_BUILD_TYPE=Release -B ./build
